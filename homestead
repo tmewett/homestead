@@ -1,0 +1,72 @@
+#!/usr/bin/env fish
+
+argparse "h/help" -- $argv
+or exit 1
+
+if set -q _flag_help
+    echo "\
+Usage: homestead NAME
+
+Isolate changes to your home directory.
+
+Starts a shell in a named sandbox. Everything in the current working directory
+is writeable as normal, but any changes to other files in your home directory
+are stored in an overlay specific to the homestead.
+
+This means you can run unknown code as your user account, without worrying
+about it installing, re-configuring, or deleting any files outside of the
+current directory. It also means you can cleanly remove any changes, without
+having to hunt down what has been added or changed.
+
+The homestead overlay is stored in /home/steads."
+    exit
+end
+
+if set -q SUDO_USER
+    set USER $SUDO_USER
+    set HOME ~$USER
+end
+
+set name $argv[1]
+set upperdir /home/steads/$USER/$name
+
+if test -d $upperdir; and mountpoint -q $upperdir
+    echo "error: homestead already active"
+    exit 1
+end
+
+mkdir -p $upperdir{,.work,.merged}
+chmod 700 /home/steads/$USER
+
+if which fuse-overlayfs >/dev/null 2>&1
+    set overlayfs fuse-overlayfs
+else
+    set overlayfs mount -t overlay overlay
+end
+
+function finish -e fish_exit
+    if mountpoint -q $upperdir.merged
+        umount $upperdir.merged
+        or echo "error: Could not unmount homestead '$name'!" \
+            && echo "Close any open files inside and run 'umount $upperdir.merged'" \
+            && return
+    end
+    rmdir $upperdir.merged
+    rm -r $upperdir.work
+end
+
+$overlayfs -o lowerdir=$HOME,upperdir=$upperdir,workdir=$upperdir.work $upperdir.merged
+or exit 1
+
+echo "starting shell in homestead '$name' - type ctrl-d or 'exit' to leave"
+set cwd (pwd)
+sudo -u $USER bwrap \
+    --setenv HOMESTEAD $name \
+    --bind / / \
+    --dev-bind /dev /dev \
+    --bind /tmp /tmp \
+    --bind $upperdir.merged $HOME \
+    --bind $cwd $cwd \
+    /bin/sh -c 'exec $SHELL'
+
+echo "homestead: leaving '$name'"
