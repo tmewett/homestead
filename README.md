@@ -7,18 +7,18 @@ directory is writeable as normal, but any changes to other files in your home
 directory are stored in an overlay specific to the homestead:
 
 ```
-~/Projects/gizmo$ homestead gizmo-dev
+~/gizmo$ homestead gizmo-dev
 starting shell in homestead 'gizmo-dev' - type ctrl-d or 'exit' to leave
-~/Projects/gizmo$ ./install.sh  # I don't know what this command might do!
+(gizmo-dev) ~/gizmo$ ./install.sh       # I don't know what this command might do!
 ...
-~/Projects/gizmo$ ls ~/.gizmo-files  # Ah, it put stuff in my home
+(gizmo-dev) ~/gizmo$ ls ~/.gizmo-files  # Ah, it put stuff in my home
 bin/  data/  thing  stuff
-~/Projects/gizmo$ exit  # But if I leave the sandbox...
-~/Projects/gizmo$ ls ~/.gizmo-files  # ...there is nothing left!
+(gizmo-dev) ~/gizmo$ exit               # But if I leave the sandbox...
+~/gizmo$ ls ~/.gizmo-files              # ...there is nothing left!
 ls: cannot access '~/.gizmo-files': No such file or directory
-~/Projects/gizmo$ ls -a /home/steads/$USER/gizmo-dev  # The files are kept separate
+~/gizmo$ ls -a /home/steads/$USER/gizmo-dev  # The files are kept separate
 .gizmo-files/
-~/Projects/gizmo$ homestead gizmo-dev  # I can re-enter any time
+~/gizmo$ homestead gizmo-dev            # I can re-enter any time
 ```
 
 This means you can run unknown code as your user account, without worrying about
