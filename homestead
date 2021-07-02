@@ -1,11 +1,13 @@
 #!/usr/bin/env fish
 
-argparse "h/help" -- $argv
+argparse "h/help" "u" "shell" -- $argv
 or exit 1
+
+set homesteads /home/steads
 
 if set -q _flag_help
     echo "\
-Usage: homestead NAME
+Usage: homestead [-u] NAME
 
 Isolate changes to your home directory.
 
@@ -18,7 +20,11 @@ about it installing, re-configuring, or deleting any files outside of the
 current directory. It also means you can cleanly remove any changes, without
 having to hunt down what has been added or changed.
 
-The homestead overlay is stored in /home/steads."
+The homestead overlay is stored in $homesteads.
+
+Options:
+  -u            unmount & cleanup instead of entering
+  -h, --help    show this help text"
     exit
 end
 
@@ -28,15 +34,81 @@ if set -q SUDO_USER
 end
 
 set name $argv[1]
-set upperdir /home/steads/$USER/$name
+set upperdir $homesteads/$USER/$name
 
-if test -d $upperdir; and mountpoint -q $upperdir
+# Shell launcher
+if set -q _flag_shell
+    echo "Starting shell in homestead '$name' - type ctrl-d or 'exit' to leave"
+    echo "(Overlay stored at $upperdir)"
+    switch (basename $SHELL)
+    case fish
+        exec $SHELL -i --init-command='
+            functions --copy fish_prompt __homestead_orig_prompt
+            function fish_prompt
+                echo -n "($HOMESTEAD) "
+                __homestead_orig_prompt
+            end
+        '
+    case bash
+        set temp (mktemp)
+        echo "
+            rm $temp
+            test -f \$HOME/.bashrc && source \$HOME/.bashrc
+            PS1=\"(\$HOMESTEAD) \$PS1\"
+        " > $temp
+        exec $SHELL -i --init-file $temp
+    case '*'
+        exec $SHELL
+    end
+end
+
+function _fail_close
+    echo "error: Could not clean up homestead '$name'!"
+    echo "Close any open files inside and run 'homestead -u $name'"
+end
+
+function close_homestead
+    # This function can succeed even if the sandbox is still active, because
+    # the bind mount of .merged still exists in the sandbox. From testing,
+    # this appears to be safe; surviving processes cannot write to any files,
+    # and starting another sandbox doesn't affect that (so we won't be clashing
+    # workdirs.)
+    if mountpoint -q $upperdir.merged
+        umount $upperdir.merged
+        or _fail_close && return 1
+    end
+    if test -d $upperdir.merged
+        rmdir $upperdir.merged
+        or _fail_close && return 1
+    end
+    if test -d $upperdir.work
+        rm -r $upperdir.work
+        or _fail_close && return 1
+    end
+    return 0
+end
+
+if set -q _flag_u
+    close_homestead
+    exit $status
+end
+
+if mountpoint -q $upperdir.merged
     echo "error: homestead already active"
     exit 1
 end
 
+if test ! -d $homesteads
+or test ! -w $homesteads
+    echo "error: Cannot access directory $homesteads"
+    echo "Please ensure it exists and is writeable"
+    exit 1
+end
+
 mkdir -p $upperdir{,.work,.merged}
-chmod 700 /home/steads/$USER
+and chmod 700 $homesteads/$USER
+and chown $USER:$USER $homesteads/$USER $upperdir{,.work,.merged}
+or exit 1
 
 if which fuse-overlayfs >/dev/null 2>&1
     set overlayfs fuse-overlayfs
@@ -45,28 +117,20 @@ else
 end
 
 function finish -e fish_exit
-    if mountpoint -q $upperdir.merged
-        umount $upperdir.merged
-        or echo "error: Could not unmount homestead '$name'!" \
-            && echo "Close any open files inside and run 'umount $upperdir.merged'" \
-            && return
-    end
-    rmdir $upperdir.merged
-    rm -r $upperdir.work
+    close_homestead
 end
 
 $overlayfs -o lowerdir=$HOME,upperdir=$upperdir,workdir=$upperdir.work $upperdir.merged
 or exit 1
 
-echo "starting shell in homestead '$name' - type ctrl-d or 'exit' to leave"
 set cwd (pwd)
 sudo -u $USER bwrap \
     --setenv HOMESTEAD $name \
+    # New pid ns to ensure all processes remain children of bwrap
+    --unshare-pid \
     --bind / / \
     --dev-bind /dev /dev \
     --bind /tmp /tmp \
     --bind $upperdir.merged $HOME \
     --bind $cwd $cwd \
-    /bin/sh -c 'exec $SHELL'
-
-echo "homestead: leaving '$name'"
+    (status current-filename) --shell $name
