@@ -108,11 +108,6 @@ else
     set run_command (status current-filename) --shell $name
 end
 
-mkdir -p $upperdir{,.work,.merged}
-and chmod 700 $homesteads/$USER
-and chown $USER:$USER $homesteads/$USER $upperdir{,.work,.merged}
-or exit 1
-
 if which fuse-overlayfs >/dev/null 2>&1
     set overlayfs fuse-overlayfs
 else
@@ -122,6 +117,11 @@ end
 function finish -e fish_exit
     close_homestead
 end
+
+mkdir -p $upperdir{,.work,.merged}
+and chmod 700 $homesteads/$USER
+and chown $USER:$USER $homesteads/$USER $upperdir{,.work,.merged}
+or exit 1
 
 $overlayfs -o lowerdir=$HOME,upperdir=$upperdir,workdir=$upperdir.work $upperdir.merged
 or exit 1
