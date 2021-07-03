@@ -1,24 +1,21 @@
 #!/usr/bin/env fish
 
-argparse "h/help" "u" "shell" -- $argv
+argparse -n homestead -s "h/help" "u" "shell" -- $argv
 or exit 1
 
 set homesteads /home/steads
 
 if set -q _flag_help
     echo "\
-Usage: homestead [-u] NAME
+Usage: homestead [-u] NAME [COMMAND...]
 
 Isolate changes to your home directory.
 
-Starts a shell in a named sandbox. Everything in the current working directory
+Runs a command in a named sandbox. Everything in the current working directory
 is writeable as normal, but any changes to other files in your home directory
 are stored in an overlay specific to the homestead.
 
-This means you can run unknown code as your user account, without worrying
-about it installing, re-configuring, or deleting any files outside of the
-current directory. It also means you can cleanly remove any changes, without
-having to hunt down what has been added or changed.
+If COMMAND is not specified, an interactive shell is started.
 
 The homestead overlay is stored in $homesteads.
 
@@ -105,6 +102,12 @@ or test ! -w $homesteads
     exit 1
 end
 
+if test (count $argv) -gt 1
+    set run_command $argv[2..]
+else
+    set run_command (status current-filename) --shell $name
+end
+
 mkdir -p $upperdir{,.work,.merged}
 and chmod 700 $homesteads/$USER
 and chown $USER:$USER $homesteads/$USER $upperdir{,.work,.merged}
@@ -133,4 +136,4 @@ sudo -u $USER bwrap \
     --bind /tmp /tmp \
     --bind $upperdir.merged $HOME \
     --bind $cwd $cwd \
-    (status current-filename) --shell $name
+    $run_command
