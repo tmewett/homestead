@@ -1,13 +1,13 @@
 #!/usr/bin/env fish
 
-argparse -n homestead -s "h/help" "u" "shell" -- $argv
+argparse -n homestead -s "h/help" "u" "no-cwd" "shell" -- $argv
 or exit 1
 
 set homesteads /home/steads
 
 if set -q _flag_help
     echo "\
-Usage: homestead [-u] NAME [COMMAND...]
+Usage: homestead [OPTIONS] NAME [COMMAND...]
 
 Isolate changes to your home directory.
 
@@ -20,6 +20,7 @@ If COMMAND is not specified, an interactive shell is started.
 The homestead overlay is stored in $homesteads.
 
 Options:
+  --no-cwd      don't pass the current directory through the sandbox
   -u            unmount & cleanup instead of entering
   -h, --help    show this help text"
     exit
@@ -114,6 +115,13 @@ else
     set overlayfs mount -t overlay overlay
 end
 
+set cwd (pwd)
+if set -q _flag_no_cwd
+    set mount_cwd
+else
+    set mount_cwd --bind $cwd $cwd
+end
+
 function finish -e fish_exit
     close_homestead
 end
@@ -126,7 +134,6 @@ or exit 1
 $overlayfs -o lowerdir=$HOME,upperdir=$upperdir,workdir=$upperdir.work $upperdir.merged
 or exit 1
 
-set cwd (pwd)
 sudo -u $USER bwrap \
     --setenv HOMESTEAD $name \
     # New pid ns to ensure all processes remain children of bwrap
@@ -135,5 +142,5 @@ sudo -u $USER bwrap \
     --dev-bind /dev /dev \
     --bind /tmp /tmp \
     --bind $upperdir.merged $HOME \
-    --bind $cwd $cwd \
+    $mount_cwd \
     $run_command
