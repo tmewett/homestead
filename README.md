@@ -28,8 +28,10 @@ hunt down what has been added or changed.
 
 ## Installation
 
-1.  Install Fish & bwrap (`fish bubblewrap` on most distros) (no need to change
-    shells).
+### Manually
+
+1.  Install Fish and bwrap (packages `fish bubblewrap` on most distros). (You
+    don't need to change shells.)
 1.  Download `homestead` to somewhere in your `$PATH`.
 1.  Create the world-writeable homestead directory as root:
 
@@ -37,11 +39,11 @@ hunt down what has been added or changed.
     mkdir /home/steads
     chmod 777 /home/steads
     ```
-1.  (Optional) If you're not on kernel >=5.11 and want to use homestead
-    rootless/without sudo, download
+1.  (Optional) Homestead works without root on Linux kernel >=5.11. If you're on
+    an older version (see `uname -r`) and don't want to use sudo, download
     [fuse-overlayfs](https://github.com/containers/fuse-overlayfs/releases) to
-    your PATH as `fuse-overlayfs`. Homestead will use it automatically.
+    your $PATH, named as `fuse-overlayfs`. Homestead will use it automatically.
 
 See `homestead --help` for usage info.
 
-Feedback (or porting to Bash!) welcome.
+Feedback (or porting to Bash) welcome.
