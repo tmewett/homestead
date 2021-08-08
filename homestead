@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
 
-argparse -n homestead -s "h/help" "u" "no-cwd" "shell" -- $argv
+argparse -n homestead -s "h/help" "u" "s" "no-cwd" "shell" -- $argv
 or exit 1
 
 set homesteads /home/steads
@@ -115,11 +115,35 @@ else
     set overlayfs mount -t overlay overlay
 end
 
+set bwrap_args \
+    --setenv HOMESTEAD $name \
+    --die-with-parent \
+    --bind / / \
+    --dev-bind /dev /dev \
+    --bind $upperdir.merged $HOME
+
+if set -q _flag_s
+    # Can't unshare network because we need X.
+    set -a bwrap_args \
+        --unshare-pid \
+        --unshare-ipc \
+        --unshare-cgroup-try \
+        --proc /proc \
+        --tmpfs /tmp
+end
+
+if not set -q XDG_CONFIG_DIR
+    set XDG_CONFIG_DIR $HOME/.config
+end
+
+# Bind PulseAudio directory so we can get audio.
+if test -d $XDG_CONFIG_DIR/pulse
+    set -a bwrap_args --bind $XDG_CONFIG_DIR/pulse $XDG_CONFIG_DIR/pulse
+end
+
 set cwd (pwd)
-if set -q _flag_no_cwd
-    set mount_cwd
-else
-    set mount_cwd --bind $cwd $cwd
+if not set -q _flag_no_cwd
+    set -a bwrap_args --bind $cwd $cwd
 end
 
 function finish -e fish_exit
@@ -135,12 +159,5 @@ $overlayfs -o lowerdir=$HOME,upperdir=$upperdir,workdir=$upperdir.work $upperdir
 or exit 1
 
 sudo -u $USER bwrap \
-    --setenv HOMESTEAD $name \
-    # New pid ns to ensure all processes remain children of bwrap
-    --unshare-pid \
-    --bind / / \
-    --dev-bind /dev /dev \
-    --bind /tmp /tmp \
-    --bind $upperdir.merged $HOME \
-    $mount_cwd \
+    $bwrap_args \
     $run_command
