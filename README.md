@@ -26,6 +26,10 @@ it installing, re-configuring, or deleting any files outside of the current
 directory. It also means you can cleanly remove any changes, without having to
 hunt down what has been added or changed.
 
+See `homestead --help` for usage info.
+
+Feedback welcome!
+
 ## Installation
 
 ### Manually
@@ -43,8 +47,16 @@ hunt down what has been added or changed.
     chmod 777 /home/steads
     ```
 
-See `homestead --help` for usage info.
-
 Note that homestead can be used without fuse-overlayfs; it just requires root.
 
-Feedback welcome!
+## Security
+
+Homestead is designed to protect against changes to your home directory from
+direct file access. Besides that, the sandbox has a low level of isolation, so
+it is possible in theory for processes inside to affect the world outside e.g.
+via inter-process communication such as D-Bus. The `-s` option provides more
+process isolation, should you require it.
+
+Bubblewrap, the sandbox tool used by homestead, is highly secure, *but the
+configuration used is likely insufficient for running truly untrusted code
+safely.*
