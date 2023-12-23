@@ -1,43 +1,11 @@
 #!/usr/bin/env fish
 
-argparse -n homestead -s "h/help" "u" "s" "no-cwd" "shell" -- $argv
+argparse -n homestead -s "h/help" "u" "s" "no-cwd" "n/name=" "shell" -- $argv
 or exit 1
-
-set homesteads /home/steads
-
-if set -q _flag_help
-    echo "\
-Usage: homestead [OPTIONS] NAME [COMMAND...]
-
-Isolate changes to your home directory.
-
-Runs a command in a named sandbox. Everything in the current working directory
-is writeable as normal, but any changes to other files in your home directory
-are stored in an overlay specific to the homestead.
-
-If COMMAND is not specified, an interactive shell is started.
-
-The homestead overlay is stored in $homesteads.
-
-Options:
-  --no-cwd      don't pass the current directory through the sandbox
-  -u            unmount & cleanup instead of entering
-  -h, --help    show this help text"
-    exit
-end
-
-if set -q SUDO_USER
-    set USER $SUDO_USER
-    set HOME ~$USER
-end
-
-set name $argv[1]
-set upperdir $homesteads/$USER/$name
 
 # Shell launcher
 if set -q _flag_shell
-    echo "Starting shell in homestead '$name' - type ctrl-d or 'exit' to leave"
-    echo "(Overlay stored at $upperdir)"
+    echo "Starting shell in homestead - type ctrl-d or 'exit' to leave"
     switch (basename $SHELL)
     case fish
         exec $SHELL -i --init-command='
@@ -60,77 +28,43 @@ if set -q _flag_shell
     end
 end
 
-function _fail_close
-    echo "error: Could not clean up homestead '$name'!"
-    echo "Close any open files inside and run 'homestead -u $name'"
+set homesteads /home/steads
+
+if set -q SUDO_USER
+    set USER $SUDO_USER
+    set HOME ~$USER
 end
 
-function close_homestead
-    # This function can succeed even if the sandbox is still active, because
-    # the bind mount of .merged still exists in the sandbox. From testing,
-    # this appears to be safe; surviving processes cannot write to any files,
-    # and starting another sandbox doesn't affect that (so we won't be clashing
-    # workdirs.)
-    if mountpoint -q $upperdir.merged
-        umount $upperdir.merged
-        or _fail_close && return 1
-    end
-    if test -d $upperdir.merged
-        rmdir $upperdir.merged
-        or _fail_close && return 1
-    end
-    if test -d $upperdir.work
-        rm -r $upperdir.work
-        or _fail_close && return 1
-    end
-    return 0
-end
+if set -q _flag_help
+    echo "\
+Usage: homestead [OPTIONS] [-n NAME] [COMMAND...]
 
-if set -q _flag_u
-    close_homestead
-    exit $status
-end
+Isolate changes to your home directory.
 
-if mountpoint -q $upperdir.merged
-    echo "error: homestead already active"
-    exit 1
-end
+Runs a command in a named sandbox. Everything in the current working directory
+is writeable as normal, but other files in your home directory are read-only.
 
-if test ! -d $homesteads
-or test ! -w $homesteads
-    echo "error: Cannot access directory $homesteads"
-    echo "Please ensure it exists and is writeable"
-    exit 1
-end
+With `-n NAME`, the home directory is writeable, but all changes are stored in
+an overlay called NAME. Outside of the homestead, the files are unmodified.
+The overlay is created if it doesn't exist.
 
-if test (count $argv) -gt 1
-    set run_command $argv[2..]
-else
-    set run_command (status current-filename) --shell $name
-end
+The homestead overlay is stored in $homesteads/$USER.
 
-if which fuse-overlayfs >/dev/null 2>&1
-    set overlayfs fuse-overlayfs
-else
-    set overlayfs mount -t overlay overlay
+If COMMAND is not specified, an interactive shell is started.
+
+Options:
+  -n NAME       save all writes in the home directory into overlay NAME
+  --no-cwd      don't pass the current directory through the sandbox
+  -u            unmount & cleanup instead of entering (requires -n)
+  -s            isolate more things (PIDs, IPC, cgroup, /proc, /tmp)
+  -h, --help    show this help text"
+    exit
 end
 
 set bwrap_args \
-    --setenv HOMESTEAD $name \
     --die-with-parent \
     --bind / / \
     --dev-bind /dev /dev \
-    --bind $upperdir.merged $HOME
-
-if set -q _flag_s
-    # Can't unshare network because we need X.
-    set -a bwrap_args \
-        --unshare-pid \
-        --unshare-ipc \
-        --unshare-cgroup-try \
-        --proc /proc \
-        --tmpfs /tmp
-end
 
 if not set -q XDG_CONFIG_DIR
     set XDG_CONFIG_DIR $HOME/.config
@@ -146,18 +80,97 @@ if not set -q _flag_no_cwd
     set -a bwrap_args --bind $cwd $cwd
 end
 
-function finish -e fish_exit
-    close_homestead
+if set -q _flag_name
+    set upperdir $homesteads/$USER/$_flag_name
+
+    function _fail_close
+        echo "error: Could not clean up homestead '$_flag_name'!"
+        echo "Close any open files inside and run 'homestead -n $_flag_name -u'"
+    end
+
+    function close_homestead
+        # This function can succeed even if the sandbox is still active, because
+        # the bind mount of .merged still exists in the sandbox. From testing,
+        # this appears to be safe; surviving processes cannot write to any files,
+        # and starting another sandbox doesn't affect that (so we won't be clashing
+        # workdirs.)
+        if mountpoint -q $upperdir.merged
+            umount $upperdir.merged
+            or _fail_close && return 1
+        end
+        if test -d $upperdir.merged
+            rmdir $upperdir.merged
+            or _fail_close && return 1
+        end
+        if test -d $upperdir.work
+            rm -r $upperdir.work
+            or _fail_close && return 1
+        end
+        return 0
+    end
+
+    if set -q _flag_u
+        close_homestead
+        exit $status
+    end
+
+    if mountpoint -q $upperdir.merged
+        echo "error: homestead already active"
+        exit 1
+    end
+
+    if test ! -d $homesteads
+    or test ! -w $homesteads
+        echo "error: Cannot access directory $homesteads"
+        echo "Please ensure it exists and is writeable"
+        exit 1
+    end
+
+    if which fuse-overlayfs >/dev/null 2>&1
+        set overlayfs fuse-overlayfs
+    else
+        set overlayfs mount -t overlay overlay
+    end
+
+    if set -q _flag_s
+        # Can't unshare network because we want X.
+        set -a bwrap_args \
+            --unshare-pid \
+            --unshare-ipc \
+            --unshare-cgroup-try \
+            --proc /proc \
+            --tmpfs /tmp
+    end
+
+    set bwrap_args $bwrap_args \
+        --setenv HOMESTEAD $_flag_name \
+        --bind $upperdir.merged $HOME
+
+    function finish -e fish_exit
+        close_homestead
+    end
+
+    mkdir -p $upperdir{,.work,.merged}
+    and chmod 700 $homesteads/$USER
+    and chown $USER:$USER $homesteads/$USER $upperdir{,.work,.merged}
+    or exit 1
+
+    $overlayfs -o lowerdir=$HOME,upperdir=$upperdir,workdir=$upperdir.work $upperdir.merged
+    or exit 1
+else
+    set bwrap_args $bwrap_args \
+        --ro-bind $HOME $HOME
 end
 
-mkdir -p $upperdir{,.work,.merged}
-and chmod 700 $homesteads/$USER
-and chown $USER:$USER $homesteads/$USER $upperdir{,.work,.merged}
-or exit 1
+if test (count $argv) -gt 1
+    set run_command $argv[2..]
+else
+    set run_command (status current-filename) --shell
+end
 
-$overlayfs -o lowerdir=$HOME,upperdir=$upperdir,workdir=$upperdir.work $upperdir.merged
-or exit 1
-
+echo sudo -u $USER bwrap \
+    $bwrap_args \
+    $run_command
 sudo -u $USER bwrap \
     $bwrap_args \
     $run_command
