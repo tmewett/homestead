@@ -1,14 +1,36 @@
 # homestead
 
-Rootless sandbox for your home directory.
-
-Homestead starts a shell in a named sandbox. Everything in the current working
-directory is writeable as normal, but any changes to other files in your home
-directory are stored in an overlay specific to the homestead:
+The most convenient sandbox for your home directory.
 
 ```
-~/gizmo$ homestead gizmo-dev
-starting shell in homestead 'gizmo-dev' - type ctrl-d or 'exit' to leave
+Usage: homestead [OPTIONS] [-n NAME] [COMMAND...]
+
+Isolate changes to your home directory.
+
+Runs a command in a sandbox. Everything in the current working directory
+is writeable as normal, but other files in your home directory are read-only.
+
+With `-n NAME`, the home directory is writeable, but all changes are stored in
+an overlay called NAME. Outside of the homestead, the files are unmodified.
+The overlay is created if it doesn't exist.
+
+The homestead overlay is stored in /home/steads/tom.
+
+If COMMAND is not specified, an interactive shell is started.
+
+Options:
+  -n NAME       save all writes in the home directory into overlay NAME
+  --no-cwd      don't pass the current directory through the sandbox
+  -u            unmount & cleanup instead of entering (requires -n)
+  -s            isolate more things (PIDs, IPC, cgroup, /proc, /tmp)
+  -h, --help    show this help text
+```
+
+Example:
+
+```
+~/gizmo$ homestead -n gizmo-dev
+starting shell in homestead - type ctrl-d or 'exit' to leave
 (gizmo-dev) ~/gizmo$ ./install.sh       # I don't know what this command might do!
 ...
 (gizmo-dev) ~/gizmo$ ls ~/.gizmo-files  # Ah, it put stuff in my home
@@ -18,15 +40,13 @@ bin/  data/  thing  stuff
 ls: cannot access '~/.gizmo-files': No such file or directory
 ~/gizmo$ ls -a /home/steads/$USER/gizmo-dev  # The files are kept separate
 .gizmo-files/
-~/gizmo$ homestead gizmo-dev            # I can re-enter any time
+~/gizmo$ homestead -n gizmo-dev         # I can re-enter any time
 ```
 
 This means you can run unknown code as your user account, without worrying about
 it installing, re-configuring, or deleting any files outside of the current
 directory. It also means you can cleanly remove any changes, without having to
 hunt down what has been added or changed.
-
-See `homestead --help` for usage info.
 
 Feedback welcome!
 
@@ -36,7 +56,7 @@ Feedback welcome!
 
 1.  Install Fish, bwrap, and fuse-overlayfs.
     *   Packages `fish bubblewrap fuse-overlayfs` on most distros.
-    *   (You don't need to change shells.)
+    *   You can use homestead with any shell, Fish just has to be installed.
     *   If fuse-overlayfs isn't packaged, you can download an executable here:
         https://github.com/containers/fuse-overlayfs/releases
 1.  Download `homestead` to somewhere in your $PATH.
@@ -47,7 +67,7 @@ Feedback welcome!
     chmod 777 /home/steads
     ```
 
-Note that homestead can be used without fuse-overlayfs; it just requires root.
+Note that homestead can be used as root without fuse-overlayfs.
 
 ## Security
 
