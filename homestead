@@ -162,8 +162,8 @@ else
         --ro-bind $HOME $HOME
 end
 
-if test (count $argv) -gt 1
-    set run_command $argv[2..]
+if test (count $argv) -gt 0
+    set run_command $argv[1..]
 else
     set run_command (status current-filename) --shell
 end
